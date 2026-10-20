@@ -1,0 +1,81 @@
+openapi: 3.1.0
+info:
+  title: OpenStick local API
+  version: 0.1.0-draft
+  description: Draft. Served by openstickd on the LAN, discovered via mDNS `_openstick._tcp`. See docs/security.md.
+servers:
+  - url: http://openstick.local:8460
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+  schemas:
+    Device:
+      type: object
+      properties:
+        name: { type: string }
+        model: { type: string }
+        os_version: { type: string }
+        power: { type: string, enum: [on, standby] }
+        current_app: { type: [string, "null"] }
+    App:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        resolution_ceiling: { type: string, examples: ["720p", "4K"] }
+paths:
+  /v1/pair:
+    post:
+      summary: Start or complete pairing. Without a code, shows a code on the TV. With the code, returns a token.
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { client_name: { type: string }, code: { type: string } } }
+      responses:
+        "202": { description: Code shown on the TV }
+        "200":
+          description: Paired
+          content: { application/json: { schema: { type: object, properties: { token: { type: string } } } } }
+        "429": { description: Too many attempts }
+  /v1/device:
+    get:
+      summary: Device info and state
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Device" } } } }
+  /v1/power:
+    post:
+      summary: Turn the TV on or to standby via CEC
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { state: { type: string, enum: [on, standby] } } } } }
+      responses: { "204": { description: Done } }
+  /v1/apps:
+    get:
+      summary: Installed apps
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/App" } } } } }
+  /v1/apps/{id}/launch:
+    post:
+      summary: Launch an app, optionally with a content URL
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } }
+      responses: { "204": { description: Launched } }
+  /v1/input/key:
+    post:
+      summary: Send a remote-control key
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { key: { type: string, enum: [up, down, left, right, select, back, home, play_pause, volume_up, volume_down, mute] } } } } }
+      responses: { "204": { description: Sent } }
+  /v1/notify:
+    post:
+      summary: Show an on-screen notification
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [message], properties: { title: { type: string }, message: { type: string }, duration_s: { type: integer, default: 5 } } } } }
+      responses: { "204": { description: Shown } }
+  /v1/events:
+    get:
+      summary: WebSocket upgrade. Streams state changes (power, current_app, playback).
+      responses: { "101": { description: Switching protocols } }
